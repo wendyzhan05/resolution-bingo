@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resolution Bingo (Local)</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div>
+          <h1 id="titleText">Resolution Bingo</h1>
+          <p class="subtitle" id="subtitle">Local-only personal bingo card</p>
+        </div>
+        <div class="header-actions">
+          <button id="langToggle" class="ghost">中文</button>
+          <button id="resetBtn" class="ghost">New Card</button>
+        </div>
+      </header>
+
+      <section class="card-section">
+        <div class="card-header">
+          <input id="titleInput" class="title-input" placeholder="Card title" />
+          <div id="bingoBadge" class="bingo-badge" hidden>BINGO!</div>
+        </div>
+        <div class="grid-wrapper">
+          <div id="grid" class="grid" aria-label="Bingo grid"></div>
+          <div id="bingoLines" class="bingo-lines"></div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <div class="control">
+          <label for="bgColor" id="labelBg">Background</label>
+          <input id="bgColor" type="color" />
+        </div>
+        <div class="control">
+          <label for="cellColor" id="labelCell">Cell</label>
+          <input id="cellColor" type="color" />
+        </div>
+        <div class="control">
+          <label for="accentColor" id="labelAccent">Accent</label>
+          <input id="accentColor" type="color" />
+        </div>
+        <div class="control">
+          <label for="textColor" id="labelText">Text</label>
+          <input id="textColor" type="color" />
+        </div>
+      </section>
+
+      <footer class="footer">
+        <p id="tipText">Tip: click a cell to check it off. Double-click to edit text.</p>
+      </footer>
+    </div>
+
+    <canvas id="fireworks" class="fireworks" aria-hidden="true"></canvas>
+    <script src="app.js"></script>
+  </body>
+</html>
