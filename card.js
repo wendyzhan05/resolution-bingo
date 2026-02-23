@@ -438,7 +438,7 @@ function getCopy() {
       toggleLabel: "中文",
       modeEdit: "Edit Mode",
       modeCheck: "Check Mode",
-      back: "All Cards",
+      back: "← Back",
     },
     zh: {
       title: "新年目标宾果",
@@ -454,7 +454,7 @@ function getCopy() {
       toggleLabel: "EN",
       modeEdit: "编辑模式",
       modeCheck: "勾选模式",
-      back: "全部卡片",
+      back: "← 返回",
     },
   };
   return copy[currentLang];
@@ -667,13 +667,13 @@ function renderAll() {
 }
 
 function init() {
+  renderAll();
+  bindInputs();
+
   ensureAuth()
     .then(loadCard)
     .then(() => {
-      renderAll();
-      bindInputs();
       subscribeCard();
-
       window.addEventListener("resize", () => {
         if (prevBingoKeys.size > 0) {
           const results = checkBingo(data.cells.map((cell) => cell.checked));

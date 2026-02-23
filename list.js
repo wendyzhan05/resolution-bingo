@@ -29,6 +29,11 @@ const elements = {
   createRoomBtn: document.getElementById("createRoomBtn"),
   roomStatus: document.getElementById("roomStatus"),
   leaveRoomBtn: document.getElementById("leaveRoomBtn"),
+  confirmModal: document.getElementById("confirmModal"),
+  confirmTitle: document.getElementById("confirmTitle"),
+  confirmMessage: document.getElementById("confirmMessage"),
+  confirmCancel: document.getElementById("confirmCancel"),
+  confirmOk: document.getElementById("confirmOk"),
 };
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -77,6 +82,9 @@ function getCopy() {
       tip: "Tip: cards are shared with anyone in the room.",
       count: (n) => `${n} card${n === 1 ? "" : "s"}`,
       confirmRemove: "Remove this card? This cannot be undone.",
+      confirmTitle: "Delete card?",
+      confirmOk: "Delete",
+      confirmCancel: "Cancel",
       join: "Join Room",
       create: "Create Room",
       roomPlaceholder: "Enter room code",
@@ -96,6 +104,9 @@ function getCopy() {
       tip: "提示：同一房间的成员都能看到这些卡片。",
       count: (n) => `${n} 张卡片`,
       confirmRemove: "确定删除这张卡片吗？此操作无法撤销。",
+      confirmTitle: "删除卡片？",
+      confirmOk: "删除",
+      confirmCancel: "取消",
       join: "加入房间",
       create: "创建房间",
       roomPlaceholder: "输入房间码",
@@ -133,6 +144,9 @@ function applyLanguage() {
   elements.createRoomBtn.textContent = copy.create;
   elements.roomCodeInput.placeholder = copy.roomPlaceholder;
   elements.leaveRoomBtn.textContent = copy.leave;
+  elements.confirmTitle.textContent = copy.confirmTitle;
+  elements.confirmOk.textContent = copy.confirmOk;
+  elements.confirmCancel.textContent = copy.confirmCancel;
   updateRoomStatus();
 }
 
@@ -218,8 +232,8 @@ async function fetchCards() {
 }
 
 async function removeCard(id) {
-  const copy = getCopy();
-  if (!confirm(copy.confirmRemove)) return;
+  const ok = await showConfirm(getCopy().confirmRemove);
+  if (!ok) return;
   await supabase.from("cards").delete().eq("id", id);
   fetchCards();
 }
@@ -244,7 +258,7 @@ async function createCard() {
     console.error(error);
     return;
   }
-  window.location.href = `card.html?id=${data.id}`;
+  fetchCards();
 }
 
 async function joinRoomByCode(code) {
@@ -328,6 +342,26 @@ function bindEvents() {
   elements.createRoomBtn.addEventListener("click", () => createRoom());
 
   elements.leaveRoomBtn.addEventListener("click", () => leaveRoom());
+}
+
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    elements.confirmMessage.textContent = message;
+    elements.confirmModal.hidden = false;
+
+    const cleanup = (result) => {
+      elements.confirmModal.hidden = true;
+      elements.confirmCancel.removeEventListener("click", onCancel);
+      elements.confirmOk.removeEventListener("click", onOk);
+      resolve(result);
+    };
+
+    const onCancel = () => cleanup(false);
+    const onOk = () => cleanup(true);
+
+    elements.confirmCancel.addEventListener("click", onCancel);
+    elements.confirmOk.addEventListener("click", onOk);
+  });
 }
 
 async function init() {

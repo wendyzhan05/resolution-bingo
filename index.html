@@ -43,6 +43,17 @@
       </footer>
     </div>
 
+    <div id="confirmModal" class="modal" hidden>
+      <div class="modal-content">
+        <h3 id="confirmTitle">Confirm</h3>
+        <p id="confirmMessage">Are you sure?</p>
+        <div class="modal-actions">
+          <button id="confirmCancel" class="ghost">Cancel</button>
+          <button id="confirmOk" class="ghost primary">Delete</button>
+        </div>
+      </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.min.js"></script>
     <script src="list.js"></script>
   </body>
