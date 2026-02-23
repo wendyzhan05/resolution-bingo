@@ -42,7 +42,7 @@ const elements = {
   tipText: document.getElementById("tipText"),
 };
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase = null;
 const cardId = getCardIdFromUrl();
 const room = loadRoom();
 
@@ -113,6 +113,9 @@ function normalizeData(input) {
 }
 
 async function ensureAuth() {
+  if (!supabase) {
+    throw new Error("Supabase client is not initialized.");
+  }
   const { data } = await supabase.auth.getUser();
   if (data?.user) {
     currentUserId = data.user.id;
@@ -124,6 +127,13 @@ async function ensureAuth() {
     throw result.error;
   }
   currentUserId = result.data.user.id;
+}
+
+function initSupabaseClient() {
+  if (!window.supabase || typeof window.supabase.createClient !== "function") {
+    throw new Error("Supabase SDK failed to load. Hard refresh and try again.");
+  }
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
 async function loadCard() {
@@ -667,6 +677,13 @@ function renderAll() {
 }
 
 function init() {
+  try {
+    initSupabaseClient();
+  } catch (error) {
+    alert(error.message || "Initialization failed.");
+    return;
+  }
+
   renderAll();
   bindInputs();
 

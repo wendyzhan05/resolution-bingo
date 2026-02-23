@@ -36,7 +36,7 @@ const elements = {
   confirmOk: document.getElementById("confirmOk"),
 };
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let supabase = null;
 let currentLang = loadLang();
 let currentRoom = loadRoom();
 let currentUserId = null;
@@ -132,6 +132,13 @@ async function ensureAuth() {
   }
   currentUserId = result.data.user.id;
   authReady = true;
+}
+
+function initSupabaseClient() {
+  if (!window.supabase || typeof window.supabase.createClient !== "function") {
+    throw new Error("Supabase SDK failed to load. Hard refresh and try again.");
+  }
+  supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
 function applyLanguage() {
@@ -397,6 +404,9 @@ function showConfirm(message) {
 }
 
 async function ensureAuthIfNeeded() {
+  if (!supabase) {
+    throw new Error("Supabase client is not initialized.");
+  }
   if (authReady && currentUserId) return;
   try {
     await ensureAuth();
@@ -416,6 +426,7 @@ async function init() {
   bindEvents();
   elements.confirmModal.hidden = true;
   try {
+    initSupabaseClient();
     await ensureAuthIfNeeded();
     if (currentRoom) {
       await fetchCards();
@@ -424,6 +435,10 @@ async function init() {
       renderList([]);
     }
   } catch (error) {
+    showError(error.message || "Initialization failed.");
+    elements.createRoomBtn.disabled = true;
+    elements.joinRoomBtn.disabled = true;
+    elements.newCardBtn.disabled = true;
     renderList([]);
   }
 }
