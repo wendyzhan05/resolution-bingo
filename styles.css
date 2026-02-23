@@ -99,6 +99,68 @@ h1 {
   backdrop-filter: blur(12px);
 }
 
+.list-section {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.list-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.list-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.card-tile {
+  background: rgba(30, 38, 58, 0.9);
+  border: 1px solid rgba(110, 231, 255, 0.15);
+  border-radius: 18px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 140px;
+}
+
+.card-tile h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.card-tile p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.ghost.primary {
+  background: linear-gradient(120deg, rgba(110, 231, 255, 0.3), rgba(124, 92, 255, 0.3));
+  border-color: rgba(110, 231, 255, 0.5);
+}
+
 .card-header {
   display: flex;
   align-items: center;

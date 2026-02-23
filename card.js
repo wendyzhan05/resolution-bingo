@@ -1,6 +1,8 @@
-const STORAGE_KEY = "bingo-local-v1";
+const LEGACY_KEY = "bingo-local-v1";
 const LANG_KEY = "bingo-local-lang";
 const MODE_KEY = "bingo-local-mode";
+const CARD_LIST_KEY = "bingo-local-cards";
+const CARD_PREFIX = "bingo-card-";
 const GRID_SIZE = 5;
 
 const defaultData = {
@@ -30,6 +32,7 @@ const elements = {
   resetBtn: document.getElementById("resetBtn"),
   langToggle: document.getElementById("langToggle"),
   modeToggle: document.getElementById("modeToggle"),
+  backBtn: document.getElementById("backBtn"),
   titleText: document.getElementById("titleText"),
   subtitle: document.getElementById("subtitle"),
   labelBg: document.getElementById("labelBg"),
@@ -39,6 +42,11 @@ const elements = {
   tipText: document.getElementById("tipText"),
 };
 
+const cardId = getCardIdFromUrl();
+if (!cardId) {
+  window.location.href = "index.html";
+}
+
 let data = loadData();
 let audioCtx;
 let audioReady = false;
@@ -47,7 +55,8 @@ let prevBingoKeys = new Set();
 let currentMode = loadMode();
 
 function loadData() {
-  const raw = localStorage.getItem(STORAGE_KEY);
+  migrateLegacyData();
+  const raw = localStorage.getItem(cardStorageKey(cardId));
   if (!raw) return structuredClone(defaultData);
   try {
     const parsed = JSON.parse(raw);
@@ -59,7 +68,8 @@ function loadData() {
 }
 
 function saveData() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  localStorage.setItem(cardStorageKey(cardId), JSON.stringify(data));
+  updateCardMeta();
 }
 
 function normalizeData(input) {
@@ -81,6 +91,69 @@ function normalizeData(input) {
   }
 
   return safe;
+}
+
+function getCardIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("id");
+}
+
+function cardStorageKey(id) {
+  return `${CARD_PREFIX}${id}`;
+}
+
+function loadCardList() {
+  const raw = localStorage.getItem(CARD_LIST_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    return [];
+  }
+}
+
+function saveCardList(list) {
+  localStorage.setItem(CARD_LIST_KEY, JSON.stringify(list));
+}
+
+function updateCardMeta() {
+  const list = loadCardList();
+  const existing = list.find((card) => card.id === cardId);
+  const now = new Date().toISOString();
+  if (existing) {
+    existing.title = data.title || "";
+    existing.updatedAt = now;
+  } else {
+    list.push({
+      id: cardId,
+      title: data.title || "",
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+  saveCardList(list);
+}
+
+function migrateLegacyData() {
+  const list = loadCardList();
+  const legacyRaw = localStorage.getItem(LEGACY_KEY);
+  if (!legacyRaw || list.length > 0) return;
+  try {
+    const legacy = JSON.parse(legacyRaw);
+    const newId = crypto.randomUUID ? crypto.randomUUID() : `card-${Date.now()}`;
+    localStorage.setItem(cardStorageKey(newId), JSON.stringify(legacy));
+    saveCardList([
+      {
+        id: newId,
+        title: typeof legacy?.title === "string" ? legacy.title : "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+    ]);
+    localStorage.removeItem(LEGACY_KEY);
+  } catch (err) {
+    console.warn("Failed to migrate legacy data.");
+  }
 }
 
 function applyTheme() {
@@ -491,6 +564,7 @@ function getCopy() {
       toggleLabel: "中文",
       modeEdit: "Edit Mode",
       modeCheck: "Check Mode",
+      back: "All Cards",
     },
     zh: {
       title: "新年目标宾果",
@@ -508,6 +582,7 @@ function getCopy() {
       toggleLabel: "EN",
       modeEdit: "编辑模式",
       modeCheck: "勾选模式",
+      back: "全部卡片",
     },
   };
   return copy[currentLang];
@@ -531,6 +606,7 @@ function applyLanguage() {
   elements.labelText.textContent = copy.labelText;
   elements.tipText.textContent = copy.tip;
   elements.langToggle.textContent = copy.toggleLabel;
+  elements.backBtn.textContent = copy.back;
   applyMode();
 }
 
