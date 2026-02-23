@@ -220,6 +220,10 @@ h1 {
   z-index: 30;
 }
 
+.modal[hidden] {
+  display: none;
+}
+
 .modal-content {
   background: rgba(18, 24, 38, 0.95);
   border: 1px solid rgba(110, 231, 255, 0.25);

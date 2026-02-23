@@ -353,14 +353,24 @@ function showConfirm(message) {
       elements.confirmModal.hidden = true;
       elements.confirmCancel.removeEventListener("click", onCancel);
       elements.confirmOk.removeEventListener("click", onOk);
+      elements.confirmModal.removeEventListener("click", onBackdrop);
+      document.removeEventListener("keydown", onKey);
       resolve(result);
     };
 
     const onCancel = () => cleanup(false);
     const onOk = () => cleanup(true);
+    const onBackdrop = (event) => {
+      if (event.target === elements.confirmModal) cleanup(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") cleanup(false);
+    };
 
     elements.confirmCancel.addEventListener("click", onCancel);
     elements.confirmOk.addEventListener("click", onOk);
+    elements.confirmModal.addEventListener("click", onBackdrop);
+    document.addEventListener("keydown", onKey);
   });
 }
 
@@ -368,6 +378,7 @@ async function init() {
   await ensureAuth();
   applyLanguage();
   bindEvents();
+  elements.confirmModal.hidden = true;
   if (currentRoom) {
     await fetchCards();
     subscribeRoom(currentRoom.id);
