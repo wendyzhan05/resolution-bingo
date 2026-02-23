@@ -41,6 +41,7 @@ let currentLang = loadLang();
 let currentRoom = loadRoom();
 let currentUserId = null;
 let roomChannel = null;
+let authReady = false;
 
 function loadLang() {
   return localStorage.getItem(LANG_KEY) || "en";
@@ -122,14 +123,15 @@ async function ensureAuth() {
   const { data } = await supabase.auth.getUser();
   if (data?.user) {
     currentUserId = data.user.id;
+    authReady = true;
     return;
   }
   const result = await supabase.auth.signInAnonymously();
   if (result.error) {
-    alert("Failed to sign in anonymously. Check Supabase Auth settings.");
     throw result.error;
   }
   currentUserId = result.data.user.id;
+  authReady = true;
 }
 
 function applyLanguage() {
@@ -225,7 +227,7 @@ async function fetchCards() {
     .order("updated_at", { ascending: false });
 
   if (error) {
-    console.error(error);
+    showError(`Failed to load cards: ${error.message}`);
     return;
   }
   renderList(data || []);
@@ -234,11 +236,16 @@ async function fetchCards() {
 async function removeCard(id) {
   const ok = await showConfirm(getCopy().confirmRemove);
   if (!ok) return;
-  await supabase.from("cards").delete().eq("id", id);
+  const { error } = await supabase.from("cards").delete().eq("id", id);
+  if (error) {
+    showError(`Failed to remove card: ${error.message}`);
+    return;
+  }
   fetchCards();
 }
 
 async function createCard() {
+  await ensureAuthIfNeeded();
   if (!currentRoom) return;
   const now = new Date().toISOString();
   const { data, error } = await supabase
@@ -255,19 +262,24 @@ async function createCard() {
     .single();
 
   if (error) {
-    console.error(error);
+    showError(`Failed to create card: ${error.message}`);
     return;
   }
   fetchCards();
 }
 
 async function joinRoomByCode(code) {
+  await ensureAuthIfNeeded();
   const { data: room, error } = await supabase.from("rooms").select("id,code").eq("code", code).single();
   if (error || !room) {
-    alert("Room not found.");
+    showError("Room not found.");
     return;
   }
-  await supabase.from("room_members").upsert({ room_id: room.id, user_id: currentUserId });
+  const joinResult = await supabase.from("room_members").upsert({ room_id: room.id, user_id: currentUserId });
+  if (joinResult.error) {
+    showError(`Failed to join room: ${joinResult.error.message}`);
+    return;
+  }
   currentRoom = room;
   saveRoom(room);
   await fetchCards();
@@ -276,6 +288,7 @@ async function joinRoomByCode(code) {
 }
 
 async function createRoom() {
+  await ensureAuthIfNeeded();
   const code = generateRoomCode();
   const { data: room, error } = await supabase
     .from("rooms")
@@ -284,11 +297,14 @@ async function createRoom() {
     .single();
 
   if (error) {
-    console.error(error);
-    alert("Failed to create room. Try again.");
+    showError(`Failed to create room: ${error.message}`);
     return;
   }
-  await supabase.from("room_members").upsert({ room_id: room.id, user_id: currentUserId });
+  const joinResult = await supabase.from("room_members").upsert({ room_id: room.id, user_id: currentUserId });
+  if (joinResult.error) {
+    showError(`Room created but failed to join: ${joinResult.error.message}`);
+    return;
+  }
   currentRoom = room;
   saveRoom(room);
   await fetchCards();
@@ -332,14 +348,20 @@ function bindEvents() {
     applyLanguage();
   });
 
-  elements.newCardBtn.addEventListener("click", () => createCard());
+  elements.newCardBtn.addEventListener("click", () => {
+    createCard().catch(() => {});
+  });
 
   elements.joinRoomBtn.addEventListener("click", () => {
     const code = elements.roomCodeInput.value.trim().toUpperCase();
-    if (code) joinRoomByCode(code);
+    if (code) {
+      joinRoomByCode(code).catch(() => {});
+    }
   });
 
-  elements.createRoomBtn.addEventListener("click", () => createRoom());
+  elements.createRoomBtn.addEventListener("click", () => {
+    createRoom().catch(() => {});
+  });
 
   elements.leaveRoomBtn.addEventListener("click", () => leaveRoom());
 }
@@ -374,15 +396,34 @@ function showConfirm(message) {
   });
 }
 
+async function ensureAuthIfNeeded() {
+  if (authReady && currentUserId) return;
+  try {
+    await ensureAuth();
+  } catch (error) {
+    showError(`Auth failed: ${error.message || "Unknown error"}`);
+    throw error;
+  }
+}
+
+function showError(message) {
+  elements.roomStatus.textContent = message;
+  alert(message);
+}
+
 async function init() {
-  await ensureAuth();
   applyLanguage();
   bindEvents();
   elements.confirmModal.hidden = true;
-  if (currentRoom) {
-    await fetchCards();
-    subscribeRoom(currentRoom.id);
-  } else {
+  try {
+    await ensureAuthIfNeeded();
+    if (currentRoom) {
+      await fetchCards();
+      subscribeRoom(currentRoom.id);
+    } else {
+      renderList([]);
+    }
+  } catch (error) {
     renderList([]);
   }
 }
