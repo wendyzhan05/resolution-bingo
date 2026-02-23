@@ -1,8 +1,9 @@
-const LEGACY_KEY = "bingo-local-v1";
+const SUPABASE_URL = "https://ctwcqujtbvfmxrqsgiyf.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_E9nh3hcxpfW07DAfvlRjHQ_dkejkMuu";
+
 const LANG_KEY = "bingo-local-lang";
 const MODE_KEY = "bingo-local-mode";
-const CARD_LIST_KEY = "bingo-local-cards";
-const CARD_PREFIX = "bingo-card-";
+const ROOM_KEY = "bingo-room";
 const GRID_SIZE = 5;
 
 const defaultData = {
@@ -41,34 +42,53 @@ const elements = {
   tipText: document.getElementById("tipText"),
 };
 
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const cardId = getCardIdFromUrl();
-if (!cardId) {
-  window.location.href = "index.html";
-}
+const room = loadRoom();
 
-let data = loadData();
+let data = structuredClone(defaultData);
 let audioCtx;
 let audioReady = false;
 let currentLang = loadLang();
-let prevBingoKeys = new Set();
 let currentMode = loadMode();
+let prevBingoKeys = new Set();
+let currentUserId = null;
+let saveTimer = null;
+let lastRemoteUpdate = null;
 
-function loadData() {
-  migrateLegacyData();
-  const raw = localStorage.getItem(cardStorageKey(cardId));
-  if (!raw) return structuredClone(defaultData);
+if (!cardId || !room) {
+  window.location.href = "index.html";
+}
+
+function getCardIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("id");
+}
+
+function loadRoom() {
+  const raw = localStorage.getItem(ROOM_KEY);
+  if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw);
-    return normalizeData(parsed);
+    return JSON.parse(raw);
   } catch (err) {
-    console.warn("Failed to load data, resetting.");
-    return structuredClone(defaultData);
+    return null;
   }
 }
 
-function saveData() {
-  localStorage.setItem(cardStorageKey(cardId), JSON.stringify(data));
-  updateCardMeta();
+function loadLang() {
+  return localStorage.getItem(LANG_KEY) || "en";
+}
+
+function saveLang() {
+  localStorage.setItem(LANG_KEY, currentLang);
+}
+
+function loadMode() {
+  return localStorage.getItem(MODE_KEY) || "check";
+}
+
+function saveMode() {
+  localStorage.setItem(MODE_KEY, currentMode);
 }
 
 function normalizeData(input) {
@@ -92,66 +112,56 @@ function normalizeData(input) {
   return safe;
 }
 
-function getCardIdFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get("id");
-}
-
-function cardStorageKey(id) {
-  return `${CARD_PREFIX}${id}`;
-}
-
-function loadCardList() {
-  const raw = localStorage.getItem(CARD_LIST_KEY);
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    return [];
+async function ensureAuth() {
+  const { data } = await supabase.auth.getUser();
+  if (data?.user) {
+    currentUserId = data.user.id;
+    return;
   }
-}
-
-function saveCardList(list) {
-  localStorage.setItem(CARD_LIST_KEY, JSON.stringify(list));
-}
-
-function updateCardMeta() {
-  const list = loadCardList();
-  const existing = list.find((card) => card.id === cardId);
-  const now = new Date().toISOString();
-  if (existing) {
-    existing.title = data.title || "";
-    existing.updatedAt = now;
-  } else {
-    list.push({
-      id: cardId,
-      title: data.title || "",
-      createdAt: now,
-      updatedAt: now,
-    });
+  const result = await supabase.auth.signInAnonymously();
+  if (result.error) {
+    alert("Failed to sign in anonymously. Check Supabase Auth settings.");
+    throw result.error;
   }
-  saveCardList(list);
+  currentUserId = result.data.user.id;
 }
 
-function migrateLegacyData() {
-  const list = loadCardList();
-  const legacyRaw = localStorage.getItem(LEGACY_KEY);
-  if (!legacyRaw || list.length > 0) return;
-  try {
-    const legacy = JSON.parse(legacyRaw);
-    const newId = crypto.randomUUID ? crypto.randomUUID() : `card-${Date.now()}`;
-    localStorage.setItem(cardStorageKey(newId), JSON.stringify(legacy));
-    saveCardList([
-      {
-        id: newId,
-        title: typeof legacy?.title === "string" ? legacy.title : "",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ]);
-    localStorage.removeItem(LEGACY_KEY);
-  } catch (err) {
-    console.warn("Failed to migrate legacy data.");
+async function loadCard() {
+  const { data: card, error } = await supabase
+    .from("cards")
+    .select("id,title,data,updated_at,updated_by")
+    .eq("id", cardId)
+    .eq("room_id", room.id)
+    .single();
+
+  if (error || !card) {
+    alert("Card not found.");
+    window.location.href = "index.html";
+    return;
+  }
+
+  data = normalizeData(card.data || {});
+  data.title = card.title || data.title;
+  lastRemoteUpdate = card.updated_at;
+  renderAll();
+}
+
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => saveCard(), 400);
+}
+
+async function saveCard() {
+  if (!currentUserId) return;
+  const payload = {
+    title: data.title || "",
+    data,
+    updated_at: new Date().toISOString(),
+    updated_by: currentUserId,
+  };
+  const { error } = await supabase.from("cards").update(payload).eq("id", cardId);
+  if (error) {
+    console.error(error);
   }
 }
 
@@ -187,7 +197,7 @@ function renderGrid() {
       data.cells[index].text = event.target.value;
       textEl.textContent = event.target.value || getItemPlaceholder(index);
       textEl.dataset.placeholder = event.target.value ? "false" : "true";
-      saveData();
+      scheduleSave();
     });
 
     textarea.addEventListener("click", (event) => {
@@ -204,7 +214,7 @@ function renderGrid() {
         return;
       }
       data.cells[index].checked = !data.cells[index].checked;
-      saveData();
+      scheduleSave();
       createRipple(cellEl, event);
       playClickSound();
       updateCell(cellEl, index);
@@ -243,7 +253,7 @@ function updateBingo() {
   results.forEach((line) => {
     const key = lineKey(line);
     if (!prevBingoKeys.has(key)) {
-      launchFireworks(line);
+      launchFireworks();
       playBingoSound();
     }
   });
@@ -280,74 +290,6 @@ function checkBingo(checked) {
   return lines.filter((line) => line.cells.every((index) => checked[index]));
 }
 
-function bindInputs() {
-  elements.titleInput.value = data.title;
-  elements.titleInput.addEventListener("input", (event) => {
-    data.title = event.target.value;
-    saveData();
-  });
-
-  document.addEventListener(
-    "pointerdown",
-    () => {
-      if (!audioReady) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        audioReady = true;
-      }
-    },
-    { once: true }
-  );
-
-  elements.bgColor.addEventListener("input", (event) => {
-    data.theme.bg = event.target.value;
-    applyTheme();
-    saveData();
-  });
-
-  elements.cellColor.addEventListener("input", (event) => {
-    data.theme.cell = event.target.value;
-    applyTheme();
-    saveData();
-  });
-
-  elements.accentColor.addEventListener("input", (event) => {
-    data.theme.accent = event.target.value;
-    applyTheme();
-    saveData();
-  });
-
-  elements.textColor.addEventListener("input", (event) => {
-    data.theme.text = event.target.value;
-    applyTheme();
-    saveData();
-  });
-
-  elements.langToggle.addEventListener("click", () => {
-    currentLang = currentLang === "en" ? "zh" : "en";
-    saveLang();
-    applyLanguage();
-    renderGrid();
-  });
-
-  elements.modeToggle.addEventListener("click", () => {
-    currentMode = currentMode === "edit" ? "check" : "edit";
-    saveMode();
-    applyMode();
-  });
-}
-
-function enterEditMode(cellEl, textarea) {
-  cellEl.classList.add("editing");
-  textarea.style.display = "block";
-  textarea.focus();
-  textarea.select();
-}
-
-function exitEditMode(cellEl, textarea) {
-  cellEl.classList.remove("editing");
-  textarea.style.display = "none";
-}
-
 function renderBingoLines(results) {
   elements.bingoLines.innerHTML = "";
   if (!results.length) return;
@@ -357,8 +299,8 @@ function renderBingoLines(results) {
   elements.bingoLines.style.height = `${gridRect.height}px`;
 
   results.forEach((result) => {
-    const { start, end, length, angle } = getLineGeometry(result, gridRect);
-    if (!start || !end) return;
+    const { start, length, angle } = getLineGeometry(result, gridRect);
+    if (!start) return;
     const line = document.createElement("div");
     line.className = "bingo-line";
     line.style.width = `${length}px`;
@@ -405,14 +347,195 @@ function getLineGeometry(result, gridRect) {
   const dy = end.y - start.y;
   const length = Math.sqrt(dx * dx + dy * dy);
   const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-  return { start, end, length, angle };
+  return { start, length, angle };
 }
 
 function lineKey(line) {
   return `${line.type}-${line.index}`;
 }
 
-function launchFireworks(line) {
+function bindInputs() {
+  elements.titleInput.value = data.title;
+  elements.titleInput.addEventListener("input", (event) => {
+    data.title = event.target.value;
+    scheduleSave();
+  });
+
+  document.addEventListener(
+    "pointerdown",
+    () => {
+      if (!audioReady) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioReady = true;
+      }
+    },
+    { once: true }
+  );
+
+  elements.bgColor.addEventListener("input", (event) => {
+    data.theme.bg = event.target.value;
+    applyTheme();
+    scheduleSave();
+  });
+
+  elements.cellColor.addEventListener("input", (event) => {
+    data.theme.cell = event.target.value;
+    applyTheme();
+    scheduleSave();
+  });
+
+  elements.accentColor.addEventListener("input", (event) => {
+    data.theme.accent = event.target.value;
+    applyTheme();
+    scheduleSave();
+  });
+
+  elements.textColor.addEventListener("input", (event) => {
+    data.theme.text = event.target.value;
+    applyTheme();
+    scheduleSave();
+  });
+
+  elements.langToggle.addEventListener("click", () => {
+    currentLang = currentLang === "en" ? "zh" : "en";
+    saveLang();
+    applyLanguage();
+    renderGrid();
+  });
+
+  elements.modeToggle.addEventListener("click", () => {
+    currentMode = currentMode === "edit" ? "check" : "edit";
+    saveMode();
+    applyMode();
+  });
+}
+
+function enterEditMode(cellEl, textarea) {
+  cellEl.classList.add("editing");
+  textarea.style.display = "block";
+  textarea.focus();
+  textarea.select();
+}
+
+function exitEditMode(cellEl, textarea) {
+  cellEl.classList.remove("editing");
+  textarea.style.display = "none";
+}
+
+function getCopy() {
+  const copy = {
+    en: {
+      title: "Resolution Bingo",
+      subtitle: "Shared bingo card",
+      cardTitle: "Card title",
+      bingo: "BINGO!",
+      labelBg: "Background",
+      labelCell: "Cell",
+      labelAccent: "Accent",
+      labelText: "Text",
+      tip: "Tip: use the mode toggle to switch between edit and check.",
+      itemPrefix: "Item",
+      toggleLabel: "中文",
+      modeEdit: "Edit Mode",
+      modeCheck: "Check Mode",
+      back: "All Cards",
+    },
+    zh: {
+      title: "新年目标宾果",
+      subtitle: "共享宾果卡",
+      cardTitle: "卡片标题",
+      bingo: "宾果！",
+      labelBg: "背景",
+      labelCell: "格子",
+      labelAccent: "高亮",
+      labelText: "文字",
+      tip: "提示：使用右上角模式切换编辑或勾选。",
+      itemPrefix: "项目",
+      toggleLabel: "EN",
+      modeEdit: "编辑模式",
+      modeCheck: "勾选模式",
+      back: "全部卡片",
+    },
+  };
+  return copy[currentLang];
+}
+
+function getItemPlaceholder(index) {
+  const copy = getCopy();
+  return `${copy.itemPrefix} ${index + 1}`;
+}
+
+function applyLanguage() {
+  const copy = getCopy();
+  elements.titleText.textContent = copy.title;
+  elements.subtitle.textContent = copy.subtitle;
+  elements.titleInput.placeholder = copy.cardTitle;
+  elements.bingoBadge.textContent = copy.bingo;
+  elements.labelBg.textContent = copy.labelBg;
+  elements.labelCell.textContent = copy.labelCell;
+  elements.labelAccent.textContent = copy.labelAccent;
+  elements.labelText.textContent = copy.labelText;
+  elements.tipText.textContent = copy.tip;
+  elements.langToggle.textContent = copy.toggleLabel;
+  elements.backBtn.textContent = copy.back;
+  applyMode();
+}
+
+function applyMode() {
+  const copy = getCopy();
+  const isEdit = currentMode === "edit";
+  elements.modeToggle.textContent = isEdit ? copy.modeEdit : copy.modeCheck;
+  elements.modeToggle.classList.toggle("active", isEdit);
+  elements.grid.classList.toggle("edit-mode", isEdit);
+}
+
+function createRipple(cellEl, event) {
+  const ripple = document.createElement("span");
+  ripple.className = "ripple";
+  const rect = cellEl.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  ripple.style.width = `${size}px`;
+  ripple.style.height = `${size}px`;
+  const x = event.clientX - rect.left - size / 2;
+  const y = event.clientY - rect.top - size / 2;
+  ripple.style.left = `${x}px`;
+  ripple.style.top = `${y}px`;
+  cellEl.appendChild(ripple);
+  ripple.addEventListener("animationend", () => ripple.remove());
+}
+
+function playClickSound() {
+  if (!audioReady || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  const duration = 0.18;
+
+  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
+  const noiseData = noiseBuffer.getChannelData(0);
+  for (let i = 0; i < noiseData.length; i++) {
+    noiseData[i] = (Math.random() * 2 - 1) * (1 - i / noiseData.length);
+  }
+
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = noiseBuffer;
+
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(1400, now);
+  filter.frequency.exponentialRampToValueAtTime(400, now + duration);
+
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.12, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  noise.start(now);
+  noise.stop(now + duration);
+}
+
+function launchFireworks() {
   const canvas = elements.fireworks;
   const ctx = canvas.getContext("2d");
   const dpr = window.devicePixelRatio || 1;
@@ -422,7 +545,7 @@ function launchFireworks(line) {
   canvas.height = height * dpr;
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const particles = [];
   const colors = ["#6ee7ff", "#7c5cff", "#38bdf8", "#22d3ee", "#f472b6", "#facc15"];
@@ -517,152 +640,48 @@ function playBingoSound() {
   });
 }
 
-function loadLang() {
-  return localStorage.getItem(LANG_KEY) || "en";
+function subscribeCard() {
+  supabase
+    .channel(`card-${cardId}`)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "cards", filter: `id=eq.${cardId}` },
+      (payload) => {
+        if (payload.new.updated_by === currentUserId) return;
+        if (lastRemoteUpdate && payload.new.updated_at <= lastRemoteUpdate) return;
+        data = normalizeData(payload.new.data || {});
+        data.title = payload.new.title || data.title;
+        lastRemoteUpdate = payload.new.updated_at;
+        renderAll();
+      }
+    )
+    .subscribe();
 }
 
-function saveLang() {
-  localStorage.setItem(LANG_KEY, currentLang);
-}
-
-function loadMode() {
-  return localStorage.getItem(MODE_KEY) || "check";
-}
-
-function saveMode() {
-  localStorage.setItem(MODE_KEY, currentMode);
-}
-
-function getCopy() {
-  const copy = {
-    en: {
-      title: "Resolution Bingo",
-      subtitle: "Local-only personal bingo card",
-      newCard: "New Card",
-      cardTitle: "Card title",
-      bingo: "BINGO!",
-      labelBg: "Background",
-      labelCell: "Cell",
-      labelAccent: "Accent",
-      labelText: "Text",
-      tip: "Tip: use the mode toggle to switch between edit and check.",
-      itemPrefix: "Item",
-      toggleLabel: "中文",
-      modeEdit: "Edit Mode",
-      modeCheck: "Check Mode",
-      back: "All Cards",
-    },
-    zh: {
-      title: "新年目标宾果",
-      subtitle: "仅本地保存的个人宾果卡",
-      newCard: "新卡片",
-      cardTitle: "卡片标题",
-      bingo: "宾果！",
-      labelBg: "背景",
-      labelCell: "格子",
-      labelAccent: "高亮",
-      labelText: "文字",
-      tip: "提示：使用右上角模式切换编辑或勾选。",
-      itemPrefix: "项目",
-      toggleLabel: "EN",
-      modeEdit: "编辑模式",
-      modeCheck: "勾选模式",
-      back: "全部卡片",
-    },
-  };
-  return copy[currentLang];
-}
-
-function getItemPlaceholder(index) {
-  const copy = getCopy();
-  return `${copy.itemPrefix} ${index + 1}`;
-}
-
-function applyLanguage() {
-  const copy = getCopy();
-  elements.titleText.textContent = copy.title;
-  elements.subtitle.textContent = copy.subtitle;
-  elements.resetBtn.textContent = copy.newCard;
-  elements.titleInput.placeholder = copy.cardTitle;
-  elements.bingoBadge.textContent = copy.bingo;
-  elements.labelBg.textContent = copy.labelBg;
-  elements.labelCell.textContent = copy.labelCell;
-  elements.labelAccent.textContent = copy.labelAccent;
-  elements.labelText.textContent = copy.labelText;
-  elements.tipText.textContent = copy.tip;
-  elements.langToggle.textContent = copy.toggleLabel;
-  elements.backBtn.textContent = copy.back;
-  applyMode();
-}
-
-function applyMode() {
-  const copy = getCopy();
-  const isEdit = currentMode === "edit";
-  elements.modeToggle.textContent = isEdit ? copy.modeEdit : copy.modeCheck;
-  elements.modeToggle.classList.toggle("active", isEdit);
-  elements.grid.classList.toggle("edit-mode", isEdit);
-}
-
-function createRipple(cellEl, event) {
-  const ripple = document.createElement("span");
-  ripple.className = "ripple";
-  const rect = cellEl.getBoundingClientRect();
-  const size = Math.max(rect.width, rect.height);
-  ripple.style.width = `${size}px`;
-  ripple.style.height = `${size}px`;
-  const x = event.clientX - rect.left - size / 2;
-  const y = event.clientY - rect.top - size / 2;
-  ripple.style.left = `${x}px`;
-  ripple.style.top = `${y}px`;
-  cellEl.appendChild(ripple);
-  ripple.addEventListener("animationend", () => ripple.remove());
-}
-
-function playClickSound() {
-  if (!audioReady || !audioCtx) return;
-  const now = audioCtx.currentTime;
-  const duration = 0.18;
-
-  const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * duration, audioCtx.sampleRate);
-  const data = noiseBuffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) {
-    data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
-  }
-
-  const noise = audioCtx.createBufferSource();
-  noise.buffer = noiseBuffer;
-
-  const filter = audioCtx.createBiquadFilter();
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(1400, now);
-  filter.frequency.exponentialRampToValueAtTime(400, now + duration);
-
-  const gain = audioCtx.createGain();
-  gain.gain.setValueAtTime(0.12, now);
-  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-  noise.connect(filter);
-  filter.connect(gain);
-  gain.connect(audioCtx.destination);
-
-  noise.start(now);
-  noise.stop(now + duration);
+function renderAll() {
+  applyTheme();
+  applyLanguage();
+  renderGrid();
+  updateBingo();
+  elements.titleInput.value = data.title;
 }
 
 function init() {
-  applyTheme();
-  applyLanguage();
-  applyMode();
-  renderGrid();
-  updateBingo();
-  bindInputs();
+  ensureAuth()
+    .then(loadCard)
+    .then(() => {
+      renderAll();
+      bindInputs();
+      subscribeCard();
 
-  window.addEventListener("resize", () => {
-    if (prevBingoKeys.size > 0) {
-      const results = checkBingo(data.cells.map((cell) => cell.checked));
-      renderBingoLines(results);
-    }
-  });
+      window.addEventListener("resize", () => {
+        if (prevBingoKeys.size > 0) {
+          const results = checkBingo(data.cells.map((cell) => cell.checked));
+          renderBingoLines(results);
+        }
+      });
+    })
+    .catch((err) => console.error(err));
 }
 
 init();

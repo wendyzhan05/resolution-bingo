@@ -161,6 +161,55 @@ h1 {
   border-color: rgba(110, 231, 255, 0.5);
 }
 
+.ghost.small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+.room-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(110, 231, 255, 0.15);
+  background: rgba(20, 26, 40, 0.8);
+}
+
+.room-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.room-input {
+  flex: 1;
+  min-width: 180px;
+  border-radius: 999px;
+  border: 1px solid rgba(238, 242, 255, 0.2);
+  background: rgba(14, 18, 30, 0.8);
+  color: var(--text);
+  padding: 10px 14px;
+  font-size: 0.95rem;
+}
+
+.room-input:focus {
+  outline: none;
+  border-color: rgba(110, 231, 255, 0.6);
+}
+
+.room-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.room-status {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .card-header {
   display: flex;
   align-items: center;
