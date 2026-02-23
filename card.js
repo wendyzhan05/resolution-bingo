@@ -29,7 +29,6 @@ const elements = {
   cellColor: document.getElementById("cellColor"),
   accentColor: document.getElementById("accentColor"),
   textColor: document.getElementById("textColor"),
-  resetBtn: document.getElementById("resetBtn"),
   langToggle: document.getElementById("langToggle"),
   modeToggle: document.getElementById("modeToggle"),
   backBtn: document.getElementById("backBtn"),
@@ -323,18 +322,6 @@ function bindInputs() {
     saveData();
   });
 
-  elements.resetBtn.addEventListener("click", () => {
-    if (!confirm(getCopy().confirmReset)) {
-      return;
-    }
-    data = structuredClone(defaultData);
-    saveData();
-    applyTheme();
-    renderGrid();
-    updateBingo();
-    elements.titleInput.value = data.title;
-  });
-
   elements.langToggle.addEventListener("click", () => {
     currentLang = currentLang === "en" ? "zh" : "en";
     saveLang();
@@ -559,7 +546,6 @@ function getCopy() {
       labelAccent: "Accent",
       labelText: "Text",
       tip: "Tip: use the mode toggle to switch between edit and check.",
-      confirmReset: "Start a new blank card? This will clear the current one.",
       itemPrefix: "Item",
       toggleLabel: "中文",
       modeEdit: "Edit Mode",
@@ -577,7 +563,6 @@ function getCopy() {
       labelAccent: "高亮",
       labelText: "文字",
       tip: "提示：使用右上角模式切换编辑或勾选。",
-      confirmReset: "要开始一张新卡吗？这会清空当前内容。",
       itemPrefix: "项目",
       toggleLabel: "EN",
       modeEdit: "编辑模式",
