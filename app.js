@@ -1,5 +1,6 @@
 const STORAGE_KEY = "bingo-local-v1";
 const LANG_KEY = "bingo-local-lang";
+const MODE_KEY = "bingo-local-mode";
 const GRID_SIZE = 5;
 
 const defaultData = {
@@ -28,6 +29,7 @@ const elements = {
   textColor: document.getElementById("textColor"),
   resetBtn: document.getElementById("resetBtn"),
   langToggle: document.getElementById("langToggle"),
+  modeToggle: document.getElementById("modeToggle"),
   titleText: document.getElementById("titleText"),
   subtitle: document.getElementById("subtitle"),
   labelBg: document.getElementById("labelBg"),
@@ -42,6 +44,7 @@ let audioCtx;
 let audioReady = false;
 let currentLang = loadLang();
 let prevBingoKeys = new Set();
+let currentMode = loadMode();
 
 function loadData() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -120,6 +123,11 @@ function renderGrid() {
     });
 
     cellEl.addEventListener("click", (event) => {
+      if (currentMode === "edit") {
+        event.stopPropagation();
+        enterEditMode(cellEl, textarea);
+        return;
+      }
       if (cellEl.classList.contains("editing")) {
         return;
       }
@@ -129,11 +137,6 @@ function renderGrid() {
       playClickSound();
       updateCell(cellEl, index);
       updateBingo();
-    });
-
-    cellEl.addEventListener("dblclick", (event) => {
-      event.stopPropagation();
-      enterEditMode(cellEl, textarea);
     });
 
     textarea.addEventListener("blur", () => exitEditMode(cellEl, textarea));
@@ -264,6 +267,12 @@ function bindInputs() {
     saveLang();
     applyLanguage();
     renderGrid();
+  });
+
+  elements.modeToggle.addEventListener("click", () => {
+    currentMode = currentMode === "edit" ? "check" : "edit";
+    saveMode();
+    applyMode();
   });
 }
 
@@ -456,6 +465,14 @@ function saveLang() {
   localStorage.setItem(LANG_KEY, currentLang);
 }
 
+function loadMode() {
+  return localStorage.getItem(MODE_KEY) || "check";
+}
+
+function saveMode() {
+  localStorage.setItem(MODE_KEY, currentMode);
+}
+
 function getCopy() {
   const copy = {
     en: {
@@ -468,10 +485,12 @@ function getCopy() {
       labelCell: "Cell",
       labelAccent: "Accent",
       labelText: "Text",
-      tip: "Tip: click a cell to check it off. Double-click to edit text.",
+      tip: "Tip: use the mode toggle to switch between edit and check.",
       confirmReset: "Start a new blank card? This will clear the current one.",
       itemPrefix: "Item",
       toggleLabel: "中文",
+      modeEdit: "Edit Mode",
+      modeCheck: "Check Mode",
     },
     zh: {
       title: "新年目标宾果",
@@ -483,10 +502,12 @@ function getCopy() {
       labelCell: "格子",
       labelAccent: "高亮",
       labelText: "文字",
-      tip: "提示：单击格子勾选，双击编辑文字。",
+      tip: "提示：使用右上角模式切换编辑或勾选。",
       confirmReset: "要开始一张新卡吗？这会清空当前内容。",
       itemPrefix: "项目",
       toggleLabel: "EN",
+      modeEdit: "编辑模式",
+      modeCheck: "勾选模式",
     },
   };
   return copy[currentLang];
@@ -510,6 +531,15 @@ function applyLanguage() {
   elements.labelText.textContent = copy.labelText;
   elements.tipText.textContent = copy.tip;
   elements.langToggle.textContent = copy.toggleLabel;
+  applyMode();
+}
+
+function applyMode() {
+  const copy = getCopy();
+  const isEdit = currentMode === "edit";
+  elements.modeToggle.textContent = isEdit ? copy.modeEdit : copy.modeCheck;
+  elements.modeToggle.classList.toggle("active", isEdit);
+  elements.grid.classList.toggle("edit-mode", isEdit);
 }
 
 function createRipple(cellEl, event) {
@@ -561,6 +591,7 @@ function playClickSound() {
 function init() {
   applyTheme();
   applyLanguage();
+  applyMode();
   renderGrid();
   updateBingo();
   bindInputs();

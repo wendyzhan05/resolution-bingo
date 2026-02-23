@@ -74,6 +74,12 @@ h1 {
   border-color: rgba(238, 242, 255, 0.4);
 }
 
+.ghost.active {
+  background: linear-gradient(120deg, rgba(110, 231, 255, 0.4), rgba(124, 92, 255, 0.4));
+  border-color: rgba(110, 231, 255, 0.6);
+  color: #fff;
+}
+
 .import-label {
   display: inline-flex;
   align-items: center;
