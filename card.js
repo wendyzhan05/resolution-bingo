@@ -121,10 +121,13 @@ async function ensureAuth() {
     currentUserId = data.user.id;
     return;
   }
-  const result = await supabase.auth.signInAnonymously();
+  const result = await signInAnonymousCompat();
   if (result.error) {
     alert("Failed to sign in anonymously. Check Supabase Auth settings.");
     throw result.error;
+  }
+  if (!result.data?.user) {
+    throw new Error("Anonymous auth did not return a user.");
   }
   currentUserId = result.data.user.id;
 }
@@ -134,6 +137,18 @@ function initSupabaseClient() {
     throw new Error("Supabase SDK failed to load. Hard refresh and try again.");
   }
   supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+async function signInAnonymousCompat() {
+  if (typeof supabase.auth.signInAnonymously === "function") {
+    return supabase.auth.signInAnonymously();
+  }
+
+  if (typeof supabase.auth.signIn === "function") {
+    return supabase.auth.signIn({ provider: "anonymous" });
+  }
+
+  throw new Error("Anonymous sign-in is unsupported by the loaded Supabase SDK.");
 }
 
 async function loadCard() {

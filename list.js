@@ -126,12 +126,27 @@ async function ensureAuth() {
     authReady = true;
     return;
   }
-  const result = await supabase.auth.signInAnonymously();
+  const result = await signInAnonymousCompat();
   if (result.error) {
     throw result.error;
   }
+  if (!result.data?.user) {
+    throw new Error("Anonymous auth did not return a user.");
+  }
   currentUserId = result.data.user.id;
   authReady = true;
+}
+
+async function signInAnonymousCompat() {
+  if (typeof supabase.auth.signInAnonymously === "function") {
+    return supabase.auth.signInAnonymously();
+  }
+
+  if (typeof supabase.auth.signIn === "function") {
+    return supabase.auth.signIn({ provider: "anonymous" });
+  }
+
+  throw new Error("Anonymous sign-in is unsupported by the loaded Supabase SDK.");
 }
 
 function initSupabaseClient() {
